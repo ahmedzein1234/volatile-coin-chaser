@@ -252,6 +252,132 @@ export class IndicatorCalculator {
     return 100 * ((4 * avg7) + (2 * avg14) + avg28) / 7;
   }
 
+  // Money Flow Index (MFI) - Volume-weighted RSI
+  calculateMFI(high: number[], low: number[], close: number[], volume: number[], period: number = 14): number {
+    if (high.length < period + 1 || low.length < period + 1 || close.length < period + 1 || volume.length < period + 1) return 50;
+    
+    let positiveFlow = 0;
+    let negativeFlow = 0;
+    
+    for (let i = 1; i <= period; i++) {
+      const typicalPrice = (high[i] + low[i] + close[i]) / 3;
+      const prevTypicalPrice = (high[i - 1] + low[i - 1] + close[i - 1]) / 3;
+      
+      const moneyFlow = typicalPrice * volume[i];
+      
+      if (typicalPrice > prevTypicalPrice) {
+        positiveFlow += moneyFlow;
+      } else if (typicalPrice < prevTypicalPrice) {
+        negativeFlow += moneyFlow;
+      }
+    }
+    
+    if (negativeFlow === 0) return 100;
+    
+    const moneyRatio = positiveFlow / negativeFlow;
+    return 100 - (100 / (1 + moneyRatio));
+  }
+
+  // Accumulation/Distribution Line
+  calculateADLine(high: number[], low: number[], close: number[], volume: number[]): number {
+    if (high.length !== low.length || high.length !== close.length || high.length !== volume.length || high.length < 2) return 0;
+    
+    let adLine = 0;
+    
+    for (let i = 0; i < high.length; i++) {
+      const highLowDiff = high[i] - low[i];
+      if (highLowDiff === 0) continue; // Skip if high equals low
+      
+      const clv = ((close[i] - low[i]) - (high[i] - close[i])) / highLowDiff;
+      adLine += clv * volume[i];
+    }
+    
+    return adLine;
+  }
+
+  // Parabolic SAR
+  calculateParabolicSAR(high: number[], low: number[], acceleration: number = 0.02, maximum: number = 0.2): number {
+    if (high.length < 2 || low.length < 2) return 0;
+    
+    let sar = low[0];
+    let trend = 1; // 1 for uptrend, -1 for downtrend
+    let af = acceleration;
+    let ep = high[0]; // extreme point
+    
+    for (let i = 1; i < high.length; i++) {
+      const prevSar = sar;
+      
+      // Calculate new SAR
+      sar = prevSar + af * (ep - prevSar);
+      
+      // Check for trend reversal
+      if (trend === 1) {
+        if (low[i] <= sar) {
+          trend = -1;
+          sar = ep;
+          ep = low[i];
+          af = acceleration;
+        } else {
+          if (high[i] > ep) {
+            ep = high[i];
+            af = Math.min(af + acceleration, maximum);
+          }
+          sar = Math.min(sar, low[i - 1], low[i]);
+        }
+      } else {
+        if (high[i] >= sar) {
+          trend = 1;
+          sar = ep;
+          ep = high[i];
+          af = acceleration;
+        } else {
+          if (low[i] < ep) {
+            ep = low[i];
+            af = Math.min(af + acceleration, maximum);
+          }
+          sar = Math.max(sar, high[i - 1], high[i]);
+        }
+      }
+    }
+    
+    return sar;
+  }
+
+  // Stochastic Oscillator
+  calculateStochastic(high: number[], low: number[], close: number[], kPeriod: number = 14, dPeriod: number = 3): { k: number, d: number } {
+    if (high.length < kPeriod || low.length < kPeriod || close.length < kPeriod) return { k: 50, d: 50 };
+    
+    const recentHighs = high.slice(-kPeriod);
+    const recentLows = low.slice(-kPeriod);
+    const currentClose = close[close.length - 1];
+    
+    const highestHigh = Math.max(...recentHighs);
+    const lowestLow = Math.min(...recentLows);
+    
+    if (highestHigh === lowestLow) return { k: 50, d: 50 };
+    
+    const k = ((currentClose - lowestLow) / (highestHigh - lowestLow)) * 100;
+    
+    // Calculate %D (simple moving average of %K)
+    const kValues = [];
+    for (let i = kPeriod - 1; i < close.length; i++) {
+      const periodHighs = high.slice(i - kPeriod + 1, i + 1);
+      const periodLows = low.slice(i - kPeriod + 1, i + 1);
+      const periodClose = close[i];
+      
+      const periodHighest = Math.max(...periodHighs);
+      const periodLowest = Math.min(...periodLows);
+      
+      if (periodHighest !== periodLowest) {
+        kValues.push(((periodClose - periodLowest) / (periodHighest - periodLowest)) * 100);
+      }
+    }
+    
+    const d = kValues.length >= dPeriod ? this.SMA(kValues, dPeriod) : k;
+    
+    return { k, d };
+  }
+
   // Calculate all indicators for a symbol
   calculateAllIndicators(priceHistory: PriceData[]): Indicators {
     if (priceHistory.length < 50) {
@@ -273,7 +399,12 @@ export class IndicatorCalculator {
         uo: 50,
         volume: 0,
         volumeSMA: 0,
-        volumeDrop: 0
+        volumeDrop: 0,
+        // New advanced indicators
+        mfi: 50,
+        adLine: 0,
+        parabolicSAR: 0,
+        stochastic: { k: 50, d: 50 }
       };
     }
 
@@ -302,6 +433,12 @@ export class IndicatorCalculator {
     const rvi = this.calculateRVI(opens, highs, lows, prices);
     const uo = this.calculateUltimateOscillator(highs, lows, prices);
     
+    // New advanced indicators
+    const mfi = this.calculateMFI(highs, lows, prices, volumes);
+    const adLine = this.calculateADLine(highs, lows, prices, volumes);
+    const parabolicSAR = this.calculateParabolicSAR(highs, lows);
+    const stochastic = this.calculateStochastic(highs, lows, prices);
+    
     const currentVolume = volumes[volumes.length - 1];
     const volumeSMA = this.SMA(volumes, 20);
     const volumeDrop = volumeSMA > 0 ? (currentVolume / volumeSMA) : 1;
@@ -323,7 +460,12 @@ export class IndicatorCalculator {
       uo,
       volume: currentVolume,
       volumeSMA,
-      volumeDrop
+      volumeDrop,
+      // New advanced indicators
+      mfi,
+      adLine,
+      parabolicSAR,
+      stochastic
     };
   }
 }

@@ -35,6 +35,11 @@ export interface MACD {
   histogram: number;
 }
 
+export interface Stochastic {
+  k: number;
+  d: number;
+}
+
 export interface Indicators {
   rsi: number;
   macd: MACD;
@@ -53,6 +58,11 @@ export interface Indicators {
   volume: number;
   volumeSMA: number;
   volumeDrop: number;
+  // New advanced indicators
+  mfi: number;
+  adLine: number;
+  parabolicSAR: number;
+  stochastic: Stochastic;
 }
 
 export interface Trade {

@@ -23,8 +23,10 @@ export class EntryLogicEngine {
     else if (indicators.rvi > 0) momentumScore += 5; // RVI positive
 
     // Volume indicators (30% weight)
-    if (indicators.obv > 0) volumeScore += 15; // Positive OBV
-    if (indicators.vpt > 0) volumeScore += 15; // Positive VPT
+    if (indicators.obv > 0) volumeScore += 10; // Positive OBV
+    if (indicators.vpt > 0) volumeScore += 10; // Positive VPT
+    if (indicators.adLine > 0) volumeScore += 5; // Positive A/D Line
+    if (indicators.mfi < 20) volumeScore += 5; // MFI oversold (volume confirmation)
 
     // Volatility indicators (20% weight)
     if (indicators.atrPercentile > 80) volatilityScore += 10; // High volatility
@@ -33,8 +35,10 @@ export class EntryLogicEngine {
     if (indicators.bbSqueeze) volatilityScore += 10; // Squeeze breakout potential
 
     // Range indicators (10% weight)
-    if (indicators.keltnerTouch) rangeScore += 5; // Touching channel
-    if (indicators.uo < 30) rangeScore += 5; // Oversold
+    if (indicators.keltnerTouch) rangeScore += 3; // Touching channel
+    if (indicators.uo < 30) rangeScore += 3; // Oversold
+    if (indicators.stochastic.k < 20) rangeScore += 2; // Stochastic oversold
+    if (indicators.parabolicSAR < indicators.rsi) rangeScore += 2; // SAR trend confirmation
 
     const totalScore = momentumScore + volumeScore + volatilityScore + rangeScore;
 
@@ -74,6 +78,8 @@ export class EntryLogicEngine {
     // Volume conditions
     if (indicators.obv > 0) conditions.push('Positive OBV');
     if (indicators.vpt > 0) conditions.push('Positive VPT');
+    if (indicators.adLine > 0) conditions.push('Positive A/D Line');
+    if (indicators.mfi < 20) conditions.push('MFI oversold');
 
     // Volatility conditions
     if (indicators.atrPercentile > 80) conditions.push('High volatility');
@@ -82,6 +88,8 @@ export class EntryLogicEngine {
     // Range conditions
     if (indicators.keltnerTouch) conditions.push('Keltner channel touch');
     if (indicators.uo < 30) conditions.push('Ultimate oscillator oversold');
+    if (indicators.stochastic.k < 20) conditions.push('Stochastic oversold');
+    if (indicators.parabolicSAR < indicators.rsi) conditions.push('SAR trend confirmation');
 
     return conditions;
   }
