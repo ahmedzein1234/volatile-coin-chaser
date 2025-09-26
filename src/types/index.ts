@@ -40,6 +40,51 @@ export interface Stochastic {
   d: number;
 }
 
+export interface IchimokuCloud {
+  tenkanSen: number;
+  kijunSen: number;
+  senkouSpanA: number;
+  senkouSpanB: number;
+  chikouSpan: number;
+  cloudTop: number;
+  cloudBottom: number;
+  signal: 'bullish' | 'bearish' | 'neutral';
+}
+
+export interface VolumeProfile {
+  valueAreaHigh: number;
+  valueAreaLow: number;
+  pointOfControl: number;
+  volumeAtPrice: Map<number, number>;
+  valueAreaVolume: number;
+  totalVolume: number;
+}
+
+export interface SmartMoney {
+  cvd: number; // Cumulative Volume Delta
+  delta: number; // Buy vs Sell pressure
+  orderFlow: number; // Order flow imbalance
+  smartMoneyIndex: number; // Smart money indicator
+  institutionalFlow: number; // Institutional flow
+}
+
+export interface OrderBookData {
+  bidAskSpread: number;
+  bidDepth: number;
+  askDepth: number;
+  imbalanceRatio: number;
+  liquidityScore: number;
+  depthPressure: number;
+}
+
+export interface LiquidityIndicators {
+  spread: number;
+  depth: number;
+  flow: number;
+  efficiency: number;
+  impact: number;
+}
+
 export interface Indicators {
   rsi: number;
   macd: MACD;
@@ -63,6 +108,16 @@ export interface Indicators {
   adLine: number;
   parabolicSAR: number;
   stochastic: Stochastic;
+  // Professional-grade indicators
+  ichimoku: IchimokuCloud;
+  volumeProfile: VolumeProfile;
+  garchVolatility: number;
+  fractalDimension: number;
+  hurstExponent: number;
+  // Smart money & liquidity
+  smartMoney: SmartMoney;
+  orderBook: OrderBookData;
+  liquidity: LiquidityIndicators;
 }
 
 export interface Trade {

@@ -1,4 +1,4 @@
-import { Indicators, MACD, PriceData } from '../types';
+import { Indicators, MACD, PriceData, IchimokuCloud, VolumeProfile, SmartMoney, OrderBookData, LiquidityIndicators, Stochastic } from '../types';
 
 export class IndicatorCalculator {
   
@@ -378,6 +378,385 @@ export class IndicatorCalculator {
     return { k, d };
   }
 
+  // Ichimoku Cloud Calculation
+  calculateIchimokuCloud(high: number[], low: number[], close: number[]): IchimokuCloud {
+    if (high.length < 52 || low.length < 52 || close.length < 52) {
+      return {
+        tenkanSen: 0,
+        kijunSen: 0,
+        senkouSpanA: 0,
+        senkouSpanB: 0,
+        chikouSpan: 0,
+        cloudTop: 0,
+        cloudBottom: 0,
+        signal: 'neutral'
+      };
+    }
+
+    // Tenkan-sen (Conversion Line): (9-period high + 9-period low) / 2
+    const tenkanHigh = Math.max(...high.slice(-9));
+    const tenkanLow = Math.min(...low.slice(-9));
+    const tenkanSen = (tenkanHigh + tenkanLow) / 2;
+
+    // Kijun-sen (Base Line): (26-period high + 26-period low) / 2
+    const kijunHigh = Math.max(...high.slice(-26));
+    const kijunLow = Math.min(...low.slice(-26));
+    const kijunSen = (kijunHigh + kijunLow) / 2;
+
+    // Senkou Span A (Leading Span A): (Tenkan-sen + Kijun-sen) / 2, plotted 26 periods ahead
+    const senkouSpanA = (tenkanSen + kijunSen) / 2;
+
+    // Senkou Span B (Leading Span B): (52-period high + 52-period low) / 2, plotted 26 periods ahead
+    const senkouHigh = Math.max(...high.slice(-52));
+    const senkouLow = Math.min(...low.slice(-52));
+    const senkouSpanB = (senkouHigh + senkouLow) / 2;
+
+    // Chikou Span (Lagging Span): Current close plotted 26 periods back
+    const chikouSpan = close[close.length - 1];
+
+    // Cloud boundaries
+    const cloudTop = Math.max(senkouSpanA, senkouSpanB);
+    const cloudBottom = Math.min(senkouSpanA, senkouSpanB);
+
+    // Signal determination
+    let signal: 'bullish' | 'bearish' | 'neutral' = 'neutral';
+    const currentPrice = close[close.length - 1];
+    
+    if (currentPrice > cloudTop && tenkanSen > kijunSen) {
+      signal = 'bullish';
+    } else if (currentPrice < cloudBottom && tenkanSen < kijunSen) {
+      signal = 'bearish';
+    }
+
+    return {
+      tenkanSen,
+      kijunSen,
+      senkouSpanA,
+      senkouSpanB,
+      chikouSpan,
+      cloudTop,
+      cloudBottom,
+      signal
+    };
+  }
+
+  // Volume Profile Calculation
+  calculateVolumeProfile(prices: number[], volumes: number[], bins: number = 20): VolumeProfile {
+    if (prices.length !== volumes.length || prices.length < 10) {
+      return {
+        valueAreaHigh: 0,
+        valueAreaLow: 0,
+        pointOfControl: 0,
+        volumeAtPrice: new Map(),
+        valueAreaVolume: 0,
+        totalVolume: 0
+      };
+    }
+
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const priceRange = maxPrice - minPrice;
+    const binSize = priceRange / bins;
+
+    const volumeAtPrice = new Map<number, number>();
+    let totalVolume = 0;
+
+    // Distribute volume across price levels
+    for (let i = 0; i < prices.length; i++) {
+      const priceLevel = Math.floor((prices[i] - minPrice) / binSize) * binSize + minPrice;
+      const currentVolume = volumeAtPrice.get(priceLevel) || 0;
+      volumeAtPrice.set(priceLevel, currentVolume + volumes[i]);
+      totalVolume += volumes[i];
+    }
+
+    // Find Point of Control (highest volume price level)
+    let maxVolume = 0;
+    let pointOfControl = 0;
+    for (const [price, volume] of volumeAtPrice) {
+      if (volume > maxVolume) {
+        maxVolume = volume;
+        pointOfControl = price;
+      }
+    }
+
+    // Calculate Value Area (70% of total volume)
+    const targetVolume = totalVolume * 0.7;
+    let valueAreaVolume = maxVolume;
+    let valueAreaHigh = pointOfControl;
+    let valueAreaLow = pointOfControl;
+
+    // Expand value area until 70% volume is captured
+    const sortedPrices = Array.from(volumeAtPrice.keys()).sort((a, b) => a - b);
+    const pocIndex = sortedPrices.indexOf(pointOfControl);
+
+    let upIndex = pocIndex + 1;
+    let downIndex = pocIndex - 1;
+
+    while (valueAreaVolume < targetVolume && (upIndex < sortedPrices.length || downIndex >= 0)) {
+      const upVolume = upIndex < sortedPrices.length ? volumeAtPrice.get(sortedPrices[upIndex]) || 0 : 0;
+      const downVolume = downIndex >= 0 ? volumeAtPrice.get(sortedPrices[downIndex]) || 0 : 0;
+
+      if (upVolume >= downVolume && upIndex < sortedPrices.length) {
+        valueAreaHigh = sortedPrices[upIndex];
+        valueAreaVolume += upVolume;
+        upIndex++;
+      } else if (downIndex >= 0) {
+        valueAreaLow = sortedPrices[downIndex];
+        valueAreaVolume += downVolume;
+        downIndex--;
+      } else {
+        break;
+      }
+    }
+
+    return {
+      valueAreaHigh,
+      valueAreaLow,
+      pointOfControl,
+      volumeAtPrice,
+      valueAreaVolume,
+      totalVolume
+    };
+  }
+
+  // GARCH Volatility (simplified implementation)
+  calculateGARCHVolatility(returns: number[], alpha: number = 0.1, beta: number = 0.85): number {
+    if (returns.length < 10) return 0;
+
+    let variance = this.SMA(returns.map(r => r * r), Math.min(10, returns.length));
+    
+    for (let i = 1; i < returns.length; i++) {
+      const prevVariance = variance;
+      const return_squared = returns[i] * returns[i];
+      variance = alpha * return_squared + beta * prevVariance + (1 - alpha - beta) * this.SMA(returns.map(r => r * r), Math.min(10, i + 1));
+    }
+
+    return Math.sqrt(variance);
+  }
+
+  // Fractal Dimension (Higuchi method)
+  calculateFractalDimension(prices: number[], kMax: number = 10): number {
+    if (prices.length < 20) return 1.5; // Default value
+
+    const N = prices.length;
+    const fractalDimensions: number[] = [];
+
+    for (let k = 1; k <= kMax; k++) {
+      let Lk = 0;
+      const m = Math.floor((N - 1) / k);
+
+      for (let i = 1; i <= k; i++) {
+        let Lki = 0;
+        for (let j = 1; j <= m; j++) {
+          const idx1 = i + (j - 1) * k - 1;
+          const idx2 = i + j * k - 1;
+          if (idx2 < N) {
+            Lki += Math.abs(prices[idx2] - prices[idx1]);
+          }
+        }
+        Lki = Lki * (N - 1) / (m * k);
+        Lk += Lki;
+      }
+      Lk = Lk / k;
+      
+      if (Lk > 0 && isFinite(Lk)) {
+        const fractalValue = Math.log(Lk) / Math.log(1 / k);
+        if (isFinite(fractalValue) && fractalValue >= 1.0 && fractalValue <= 2.0) {
+          fractalDimensions.push(fractalValue);
+        }
+      }
+    }
+
+    return fractalDimensions.length > 0 ? this.SMA(fractalDimensions, fractalDimensions.length) : 1.5;
+  }
+
+  // Hurst Exponent (R/S Analysis)
+  calculateHurstExponent(prices: number[]): number {
+    if (prices.length < 20) return 0.5; // Random walk default
+
+    const returns = [];
+    for (let i = 1; i < prices.length; i++) {
+      returns.push(Math.log(prices[i] / prices[i - 1]));
+    }
+
+    const n = returns.length;
+    const mean = this.SMA(returns, n);
+    
+    // Calculate cumulative deviations
+    const cumDeviations = [0];
+    for (let i = 0; i < n; i++) {
+      cumDeviations.push(cumDeviations[i] + (returns[i] - mean));
+    }
+
+    // Calculate range
+    const range = Math.max(...cumDeviations) - Math.min(...cumDeviations);
+    
+    // Calculate standard deviation
+    const variance = this.SMA(returns.map(r => Math.pow(r - mean, 2)), n);
+    const stdDev = Math.sqrt(variance);
+
+    // R/S ratio
+    const rs = range / (stdDev || 1);
+    
+    // Hurst exponent
+    return Math.log(rs) / Math.log(n);
+  }
+
+  // Smart Money Indicators
+  calculateSmartMoney(prices: number[], volumes: number[], highs: number[], lows: number[]): SmartMoney {
+    if (prices.length < 10) {
+      return {
+        cvd: 0,
+        delta: 0,
+        orderFlow: 0,
+        smartMoneyIndex: 0,
+        institutionalFlow: 0
+      };
+    }
+
+    // Cumulative Volume Delta (CVD)
+    let cvd = 0;
+    for (let i = 1; i < prices.length; i++) {
+      const priceChange = prices[i] - prices[i - 1];
+      cvd += priceChange > 0 ? volumes[i] : -volumes[i];
+    }
+
+    // Delta (Buy vs Sell pressure)
+    const recentPrices = prices.slice(-10);
+    const recentVolumes = volumes.slice(-10);
+    let buyVolume = 0;
+    let sellVolume = 0;
+
+    for (let i = 1; i < recentPrices.length; i++) {
+      if (recentPrices[i] > recentPrices[i - 1]) {
+        buyVolume += recentVolumes[i];
+      } else {
+        sellVolume += recentVolumes[i];
+      }
+    }
+
+    const delta = buyVolume - sellVolume;
+
+    // Order Flow Imbalance
+    const orderFlow = delta / (buyVolume + sellVolume || 1);
+
+    // Smart Money Index (price vs volume divergence)
+    const priceChange = (prices[prices.length - 1] - prices[0]) / prices[0];
+    const volumeChange = (volumes[volumes.length - 1] - volumes[0]) / volumes[0];
+    const smartMoneyIndex = priceChange - volumeChange;
+
+    // Institutional Flow (large volume transactions)
+    const avgVolume = this.SMA(volumes, volumes.length);
+    const largeVolumeThreshold = avgVolume * 2;
+    let institutionalFlow = 0;
+
+    for (let i = 0; i < volumes.length; i++) {
+      if (volumes[i] > largeVolumeThreshold) {
+        const priceImpact = i > 0 ? (prices[i] - prices[i - 1]) / prices[i - 1] : 0;
+        institutionalFlow += priceImpact * volumes[i];
+      }
+    }
+
+    return {
+      cvd,
+      delta,
+      orderFlow,
+      smartMoneyIndex,
+      institutionalFlow
+    };
+  }
+
+  // Order Book Analysis (simulated from price/volume data)
+  calculateOrderBookData(prices: number[], volumes: number[], highs: number[], lows: number[]): OrderBookData {
+    if (prices.length < 5) {
+      return {
+        bidAskSpread: 0,
+        bidDepth: 0,
+        askDepth: 0,
+        imbalanceRatio: 1,
+        liquidityScore: 0,
+        depthPressure: 0
+      };
+    }
+
+    const currentPrice = prices[prices.length - 1];
+    const avgVolume = this.SMA(volumes, Math.min(20, volumes.length));
+    
+    // Estimate bid-ask spread from price volatility
+    const priceVolatility = this.calculateATR(highs, lows, prices);
+    const bidAskSpread = priceVolatility * 0.1; // Estimate spread as 10% of ATR
+
+    // Estimate depth from volume patterns
+    const recentVolumes = volumes.slice(-5);
+    const bidDepth = this.SMA(recentVolumes.filter((_, i) => prices.slice(-5)[i] <= currentPrice), recentVolumes.length);
+    const askDepth = this.SMA(recentVolumes.filter((_, i) => prices.slice(-5)[i] > currentPrice), recentVolumes.length);
+
+    // Imbalance ratio
+    const imbalanceRatio = bidDepth / (askDepth || 1);
+
+    // Liquidity score (higher is better)
+    const liquidityScore = (bidDepth + askDepth) / (bidAskSpread || 1);
+
+    // Depth pressure (buying vs selling pressure)
+    const depthPressure = (bidDepth - askDepth) / (bidDepth + askDepth || 1);
+
+    return {
+      bidAskSpread,
+      bidDepth,
+      askDepth,
+      imbalanceRatio,
+      liquidityScore,
+      depthPressure
+    };
+  }
+
+  // Liquidity Indicators
+  calculateLiquidityIndicators(prices: number[], volumes: number[]): LiquidityIndicators {
+    if (prices.length < 10) {
+      return {
+        spread: 0,
+        depth: 0,
+        flow: 0,
+        efficiency: 0,
+        impact: 0
+      };
+    }
+
+    // Spread (price volatility as proxy)
+    const returns = [];
+    for (let i = 1; i < prices.length; i++) {
+      returns.push(Math.abs(prices[i] - prices[i - 1]) / prices[i - 1]);
+    }
+    const spread = this.SMA(returns, returns.length);
+
+    // Depth (average volume)
+    const depth = this.SMA(volumes, volumes.length);
+
+    // Flow (volume-weighted price change)
+    let flow = 0;
+    for (let i = 1; i < prices.length; i++) {
+      const priceChange = (prices[i] - prices[i - 1]) / prices[i - 1];
+      flow += priceChange * volumes[i];
+    }
+    flow = flow / volumes.reduce((a, b) => a + b, 0);
+
+    // Efficiency (price impact per unit volume)
+    const totalVolumeChange = volumes.reduce((a, b) => a + b, 0);
+    const totalPriceChange = Math.abs(prices[prices.length - 1] - prices[0]) / prices[0];
+    const efficiency = totalVolumeChange > 0 ? totalPriceChange / totalVolumeChange : 0;
+
+    // Impact (market impact measure)
+    const impact = spread * Math.sqrt(depth);
+
+    return {
+      spread,
+      depth,
+      flow,
+      efficiency,
+      impact
+    };
+  }
+
   // Calculate all indicators for a symbol
   calculateAllIndicators(priceHistory: PriceData[]): Indicators {
     if (priceHistory.length < 50) {
@@ -404,7 +783,23 @@ export class IndicatorCalculator {
         mfi: 50,
         adLine: 0,
         parabolicSAR: 0,
-        stochastic: { k: 50, d: 50 }
+        stochastic: { k: 50, d: 50 },
+        // Professional-grade indicators
+        ichimoku: {
+          tenkanSen: 0, kijunSen: 0, senkouSpanA: 0, senkouSpanB: 0,
+          chikouSpan: 0, cloudTop: 0, cloudBottom: 0, signal: 'neutral'
+        },
+        volumeProfile: {
+          valueAreaHigh: 0, valueAreaLow: 0, pointOfControl: 0,
+          volumeAtPrice: new Map(), valueAreaVolume: 0, totalVolume: 0
+        },
+        garchVolatility: 0,
+        fractalDimension: 1.5,
+        hurstExponent: 0.5,
+        // Smart money & liquidity
+        smartMoney: { cvd: 0, delta: 0, orderFlow: 0, smartMoneyIndex: 0, institutionalFlow: 0 },
+        orderBook: { bidAskSpread: 0, bidDepth: 0, askDepth: 0, imbalanceRatio: 1, liquidityScore: 0, depthPressure: 0 },
+        liquidity: { spread: 0, depth: 0, flow: 0, efficiency: 0, impact: 0 }
       };
     }
 
@@ -439,6 +834,24 @@ export class IndicatorCalculator {
     const parabolicSAR = this.calculateParabolicSAR(highs, lows);
     const stochastic = this.calculateStochastic(highs, lows, prices);
     
+    // Professional-grade indicators
+    const ichimoku = this.calculateIchimokuCloud(highs, lows, prices);
+    const volumeProfile = this.calculateVolumeProfile(prices, volumes);
+    
+    // Calculate returns for GARCH
+    const returns = [];
+    for (let i = 1; i < prices.length; i++) {
+      returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
+    }
+    const garchVolatility = this.calculateGARCHVolatility(returns);
+    const fractalDimension = this.calculateFractalDimension(prices);
+    const hurstExponent = this.calculateHurstExponent(prices);
+    
+    // Smart money & liquidity
+    const smartMoney = this.calculateSmartMoney(prices, volumes, highs, lows);
+    const orderBook = this.calculateOrderBookData(prices, volumes, highs, lows);
+    const liquidity = this.calculateLiquidityIndicators(prices, volumes);
+    
     const currentVolume = volumes[volumes.length - 1];
     const volumeSMA = this.SMA(volumes, 20);
     const volumeDrop = volumeSMA > 0 ? (currentVolume / volumeSMA) : 1;
@@ -465,7 +878,17 @@ export class IndicatorCalculator {
       mfi,
       adLine,
       parabolicSAR,
-      stochastic
+      stochastic,
+      // Professional-grade indicators
+      ichimoku,
+      volumeProfile,
+      garchVolatility,
+      fractalDimension,
+      hurstExponent,
+      // Smart money & liquidity
+      smartMoney,
+      orderBook,
+      liquidity
     };
   }
 }

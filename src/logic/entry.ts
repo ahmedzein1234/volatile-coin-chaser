@@ -9,36 +9,67 @@ export class EntryLogicEngine {
     let volatilityScore = 0;
     let rangeScore = 0;
 
-    // Momentum indicators (40% weight)
-    if (indicators.williamsR < -80) momentumScore += 10; // Oversold
-    else if (indicators.williamsR < -60) momentumScore += 5; // Approaching oversold
+    // Momentum indicators (40% weight) - Enhanced with advanced indicators
+    if (indicators.williamsR < -80) momentumScore += 8; // Oversold
+    else if (indicators.williamsR < -60) momentumScore += 4; // Approaching oversold
     
-    if (indicators.cci < -100) momentumScore += 10; // Oversold
-    else if (indicators.cci < -50) momentumScore += 5; // Approaching oversold
+    if (indicators.cci < -100) momentumScore += 8; // Oversold
+    else if (indicators.cci < -50) momentumScore += 4; // Approaching oversold
     
-    if (indicators.roc > 2) momentumScore += 10; // Strong momentum
-    else if (indicators.roc > 1) momentumScore += 5; // Moderate momentum
+    if (indicators.roc > 2) momentumScore += 8; // Strong momentum
+    else if (indicators.roc > 1) momentumScore += 4; // Moderate momentum
     
-    if (indicators.rvi > indicators.rviSignal) momentumScore += 10; // RVI bullish
-    else if (indicators.rvi > 0) momentumScore += 5; // RVI positive
+    if (indicators.rvi > indicators.rviSignal) momentumScore += 6; // RVI bullish
+    else if (indicators.rvi > 0) momentumScore += 3; // RVI positive
+    
+    // Ichimoku Cloud signals
+    if (indicators.ichimoku.signal === 'bullish') momentumScore += 8; // Strong trend confirmation
+    else if (indicators.ichimoku.signal === 'neutral') momentumScore += 2; // Neutral trend
+    
+    // Hurst Exponent (trend persistence)
+    if (indicators.hurstExponent > 0.6) momentumScore += 4; // Persistent trend
+    else if (indicators.hurstExponent > 0.5) momentumScore += 2; // Mild persistence
 
-    // Volume indicators (30% weight)
-    if (indicators.obv > 0) volumeScore += 10; // Positive OBV
-    if (indicators.vpt > 0) volumeScore += 10; // Positive VPT
-    if (indicators.adLine > 0) volumeScore += 5; // Positive A/D Line
-    if (indicators.mfi < 20) volumeScore += 5; // MFI oversold (volume confirmation)
-
-    // Volatility indicators (20% weight)
-    if (indicators.atrPercentile > 80) volatilityScore += 10; // High volatility
-    else if (indicators.atrPercentile > 60) volatilityScore += 5; // Moderate volatility
+    // Volume indicators (30% weight) - Enhanced with smart money
+    if (indicators.obv > 0) volumeScore += 6; // Positive OBV
+    if (indicators.vpt > 0) volumeScore += 6; // Positive VPT
+    if (indicators.adLine > 0) volumeScore += 4; // Positive A/D Line
+    if (indicators.mfi < 20) volumeScore += 4; // MFI oversold (volume confirmation)
     
-    if (indicators.bbSqueeze) volatilityScore += 10; // Squeeze breakout potential
+    // Smart Money indicators
+    if (indicators.smartMoney.delta > 0) volumeScore += 5; // Positive buying pressure
+    if (indicators.smartMoney.cvd > 0) volumeScore += 3; // Cumulative volume delta positive
+    if (indicators.smartMoney.orderFlow > 0.1) volumeScore += 2; // Strong order flow
+    
+    // Volume Profile
+    const currentPrice = indicators.volumeProfile.pointOfControl;
+    if (currentPrice > 0 && currentPrice >= indicators.volumeProfile.valueAreaLow && 
+        currentPrice <= indicators.volumeProfile.valueAreaHigh) {
+      volumeScore += 4; // Price in value area
+    }
 
-    // Range indicators (10% weight)
-    if (indicators.keltnerTouch) rangeScore += 3; // Touching channel
-    if (indicators.uo < 30) rangeScore += 3; // Oversold
+    // Volatility indicators (20% weight) - Enhanced with GARCH and Fractal
+    if (indicators.atrPercentile > 80) volatilityScore += 8; // High volatility
+    else if (indicators.atrPercentile > 60) volatilityScore += 4; // Moderate volatility
+    
+    if (indicators.bbSqueeze) volatilityScore += 6; // Squeeze breakout potential
+    
+    // GARCH volatility
+    if (indicators.garchVolatility > 0.02) volatilityScore += 4; // High GARCH volatility
+    else if (indicators.garchVolatility > 0.01) volatilityScore += 2; // Moderate GARCH volatility
+    
+    // Fractal Dimension (market complexity)
+    if (indicators.fractalDimension < 1.3) volatilityScore += 2; // High complexity/trending
+
+    // Range indicators (10% weight) - Enhanced with liquidity
+    if (indicators.keltnerTouch) rangeScore += 2; // Touching channel
+    if (indicators.uo < 30) rangeScore += 2; // Oversold
     if (indicators.stochastic.k < 20) rangeScore += 2; // Stochastic oversold
-    if (indicators.parabolicSAR < indicators.rsi) rangeScore += 2; // SAR trend confirmation
+    if (indicators.parabolicSAR < indicators.rsi) rangeScore += 1; // SAR trend confirmation
+    
+    // Liquidity and Order Book
+    if (indicators.orderBook.imbalanceRatio > 1.2) rangeScore += 2; // Bid pressure
+    if (indicators.liquidity.efficiency < 0.001) rangeScore += 1; // High liquidity efficiency
 
     const totalScore = momentumScore + volumeScore + volatilityScore + rangeScore;
 
