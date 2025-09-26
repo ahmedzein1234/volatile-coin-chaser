@@ -8,10 +8,13 @@ export class ExitLogicEngine {
     const holdTime = Date.now() - position.entryTime;
     const holdTimeMinutes = holdTime / (1000 * 60);
 
-    // Priority 1: Profit targets (highest priority)
-    if (profit >= 0.015) { // 1.5% profit
+    // Priority 1: Profit targets (highest priority) - Fee-aware
+    const totalFees = 0.002; // 0.2% Binance fees
+    const minProfitableExit = totalFees + 0.003; // 0.5% minimum profit after fees
+    
+    if (profit >= minProfitableExit) { // 0.5% profit after fees
       return {
-        reason: `Profit target reached: ${(profit * 100).toFixed(2)}%`,
+        reason: `Profit target reached: ${(profit * 100).toFixed(2)}% (after fees)`,
         priority: 1,
         triggered: true
       };

@@ -203,11 +203,12 @@ export class PositionManager {
       let quantity = riskAmount / stopLossDistance;
       
       // Adjust for Binance fees (0.2% total: 0.1% buy + 0.1% sell)
-      const feeAdjustment = 1.002;
+      const totalFees = 0.002; // 0.2%
+      const feeAdjustment = 1 + totalFees;
       quantity = quantity / feeAdjustment;
       
-      // Ensure minimum viable profit (0.25% to cover fees + small profit)
-      const minProfit = entryPrice * 0.0025;
+      // Ensure minimum viable profit (0.5% to cover fees + meaningful profit)
+      const minProfit = entryPrice * 0.005; // 0.5% minimum
       const maxQuantity = (config.trading.maxPortfolioUSDT * 0.2) / entryPrice; // Max 20% of portfolio per position
       
       quantity = Math.min(quantity, maxQuantity);
@@ -235,15 +236,19 @@ export class PositionManager {
   }
 
   calculateTakeProfit(entryPrice: number, indicators: Indicators): number {
+    // Binance fees: 0.1% maker + 0.1% taker = 0.2% total
+    const totalFees = 0.002; // 0.2%
+    const minProfitTarget = 0.005; // 0.5% minimum profit target
+    
     // Use ATR-based take profit
     const atrMultiplier = 3.0; // 3x ATR
     const atrTakeProfit = entryPrice + (indicators.atr * atrMultiplier);
     
-    // Use percentage-based take profit as backup
-    const percentageTakeProfit = entryPrice * 1.015; // 1.5% take profit
+    // Fee-aware percentage take profit (0.5% minimum to cover fees + profit)
+    const feeAwareTakeProfit = entryPrice * (1 + totalFees + minProfitTarget); // 0.7% total
     
-    // Use the closer take profit (more conservative)
-    return Math.min(atrTakeProfit, percentageTakeProfit);
+    // Use the higher of the two to ensure profitability
+    return Math.max(atrTakeProfit, feeAwareTakeProfit);
   }
 
   calculateProfit(position: Position, currentPrice: number): number {
@@ -259,12 +264,15 @@ export class PositionManager {
       position.peakPrice = currentPrice;
     }
     
-    // Progressive trailing stops
+    // Progressive trailing stops - Fee-aware
+    const totalFees = 0.002; // 0.2% Binance fees
+    const minProfitableProfit = totalFees + 0.003; // 0.5% minimum
+    
     if (profit >= 0.015) { // 1.5%
       position.trailingStop = currentPrice * 0.992; // 0.8% trail
     } else if (profit >= 0.01) { // 1.0%
       position.trailingStop = currentPrice * 0.995; // 0.5% trail
-    } else if (profit >= 0.005) { // 0.5%
+    } else if (profit >= minProfitableProfit) { // 0.5% (fee-aware)
       position.trailingStop = currentPrice * 0.997; // 0.3% trail
     }
   }
