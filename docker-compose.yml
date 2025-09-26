@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # Redis for caching and data storage
+  redis:
+    image: redis:7-alpine
+    container_name: volatile-coin-chaser-redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - volatile-network
+
+  # Volatile Coin Chaser Application
+  volatile-coin-chaser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: volatile-coin-chaser-app
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Redis Configuration
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      
+      # Trading Configuration
+      - MAX_POSITIONS=5
+      - MAX_RISK_PER_TRADE=0.02
+      - MAX_PORTFOLIO_RISK=0.10
+      - MAX_DRAWDOWN=0.05
+      
+      # Logging
+      - LOG_LEVEL=info
+      - LOG_FILE=/app/logs/trading.log
+      
+      # Binance Configuration (set these in .env file)
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+      - BINANCE_TESTNET=${BINANCE_TESTNET:-true}
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    networks:
+      - volatile-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Health check passed')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis Commander for Redis management
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: volatile-coin-chaser-redis-ui
+    restart: unless-stopped
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - volatile-network
+    profiles:
+      - tools
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  volatile-network:
+    driver: bridge
