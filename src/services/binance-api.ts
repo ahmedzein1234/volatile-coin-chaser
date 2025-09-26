@@ -92,4 +92,13 @@ export class BinanceAPIService {
       throw error;
     }
   }
+
+  async getExchangeInfo(): Promise<any> {
+    try {
+      return await this.client.exchangeInfo();
+    } catch (error) {
+      logger.error('Error getting exchange info:', error);
+      throw error;
+    }
+  }
 }
