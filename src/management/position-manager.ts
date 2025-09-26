@@ -7,6 +7,7 @@ export class PositionManager {
   private positions: Map<string, Position> = new Map();
   private binanceAPI: BinanceAPIService;
   private accountBalance: number = 0;
+  private symbolInfo: Map<string, any> = new Map();
 
   constructor() {
     this.binanceAPI = new BinanceAPIService();
@@ -16,9 +17,39 @@ export class PositionManager {
     try {
       this.accountBalance = await this.binanceAPI.getBalance();
       logger.info(`Account balance: ${this.accountBalance} USDT`);
+      
+      // Load symbol information for proper quantity precision
+      await this.loadSymbolInfo();
     } catch (error) {
       logger.error('Error initializing position manager:', error);
       throw error;
+    }
+  }
+
+  private async loadSymbolInfo(): Promise<void> {
+    try {
+      const exchangeInfo = await this.binanceAPI.getExchangeInfo();
+      
+      for (const symbolData of exchangeInfo.symbols) {
+        if (symbolData.status === 'TRADING') {
+          const lotSizeFilter = symbolData.filters.find((f: any) => f.filterType === 'LOT_SIZE');
+          const minNotionalFilter = symbolData.filters.find((f: any) => f.filterType === 'MIN_NOTIONAL' || f.filterType === 'NOTIONAL');
+          
+          this.symbolInfo.set(symbolData.symbol, {
+            stepSize: parseFloat(lotSizeFilter?.stepSize || '0.001'),
+            minQty: parseFloat(lotSizeFilter?.minQty || '0.001'),
+            maxQty: parseFloat(lotSizeFilter?.maxQty || '1000000'),
+            minNotional: parseFloat(minNotionalFilter?.minNotional || '10'),
+            baseAssetPrecision: symbolData.baseAssetPrecision,
+            quotePrecision: symbolData.quotePrecision
+          });
+        }
+      }
+      
+      logger.info(`Loaded symbol info for ${this.symbolInfo.size} trading pairs`);
+    } catch (error) {
+      logger.error('Error loading symbol info:', error);
+      // Continue without symbol info - will use defaults
     }
   }
 
@@ -37,7 +68,7 @@ export class PositionManager {
       }
 
       // Calculate position size
-      const quantity = this.calculatePositionSize(entryPrice, indicators);
+      const quantity = this.calculatePositionSize(entryPrice, indicators, symbol);
       if (quantity <= 0) {
         logger.warn(`Invalid position size for ${symbol}: ${quantity}`);
         return false;
@@ -159,17 +190,16 @@ export class PositionManager {
     }
   }
 
-  calculatePositionSize(entryPrice: number, indicators: Indicators): number {
+  calculatePositionSize(entryPrice: number, indicators: Indicators, symbol: string): number {
     try {
-      // Calculate risk amount based on fixed USDT amount (200 USDT max portfolio)
-      const maxPortfolioUSDT = config.trading.maxPortfolioUSDT;
-      const riskAmount = maxPortfolioUSDT * config.trading.maxRiskPerTrade;
+      // Use fixed 5 USDT risk per trade
+      const riskAmount = config.trading.maxRiskPerTradeUSDT; // 5 USDT
       
       // Calculate stop loss distance
       const stopLoss = this.calculateStopLoss(entryPrice, indicators);
       const stopLossDistance = Math.abs(entryPrice - stopLoss);
       
-      // Calculate position size
+      // Calculate position size based on risk amount
       let quantity = riskAmount / stopLossDistance;
       
       // Adjust for Binance fees (0.2% total: 0.1% buy + 0.1% sell)
@@ -178,14 +208,12 @@ export class PositionManager {
       
       // Ensure minimum viable profit (0.25% to cover fees + small profit)
       const minProfit = entryPrice * 0.0025;
-      const maxQuantity = (maxPortfolioUSDT * 0.2) / entryPrice; // Max 20% of portfolio per position
+      const maxQuantity = (config.trading.maxPortfolioUSDT * 0.2) / entryPrice; // Max 20% of portfolio per position
       
       quantity = Math.min(quantity, maxQuantity);
       
-      // Round to appropriate decimal places
-      const symbol = 'USDT'; // This should be passed as parameter
-      const stepSize = this.getStepSize(symbol);
-      quantity = Math.floor(quantity / stepSize) * stepSize;
+      // Apply proper quantity precision based on symbol
+      quantity = this.adjustQuantityPrecision(quantity, symbol);
       
       return Math.max(quantity, 0);
     } catch (error) {
@@ -281,10 +309,59 @@ export class PositionManager {
     return (totalRisk / this.accountBalance) * 100;
   }
 
+  private adjustQuantityPrecision(quantity: number, symbol: string): number {
+    try {
+      const symbolData = this.symbolInfo.get(symbol);
+      
+      if (!symbolData) {
+        // Fallback to default precision if symbol info not available
+        logger.warn(`No symbol info for ${symbol}, using default precision`);
+        return Math.floor(quantity * 1000) / 1000; // 3 decimal places
+      }
+      
+      const { stepSize, minQty, maxQty, minNotional } = symbolData;
+      
+      // Round to step size
+      let adjustedQuantity = Math.floor(quantity / stepSize) * stepSize;
+      
+      // Ensure minimum quantity
+      adjustedQuantity = Math.max(adjustedQuantity, minQty);
+      
+      // Ensure maximum quantity
+      adjustedQuantity = Math.min(adjustedQuantity, maxQty);
+      
+      // Check minimum notional value
+      const notionalValue = adjustedQuantity * (symbol.includes('USDT') ? 1 : 1); // This should use current price
+      if (notionalValue < minNotional) {
+        // Increase quantity to meet minimum notional
+        const requiredQuantity = Math.ceil(minNotional / (symbol.includes('USDT') ? 1 : 1) / stepSize) * stepSize;
+        adjustedQuantity = Math.max(adjustedQuantity, requiredQuantity);
+      }
+      
+      // Round to appropriate decimal places based on step size
+      const decimalPlaces = this.getDecimalPlaces(stepSize);
+      adjustedQuantity = Math.round(adjustedQuantity * Math.pow(10, decimalPlaces)) / Math.pow(10, decimalPlaces);
+      
+      logger.debug(`Quantity precision adjustment for ${symbol}: ${quantity} -> ${adjustedQuantity} (stepSize: ${stepSize})`);
+      
+      return adjustedQuantity;
+    } catch (error) {
+      logger.error(`Error adjusting quantity precision for ${symbol}:`, error);
+      return Math.floor(quantity * 1000) / 1000; // Fallback to 3 decimal places
+    }
+  }
+
+  private getDecimalPlaces(stepSize: number): number {
+    const stepStr = stepSize.toString();
+    if (stepStr.includes('.')) {
+      return stepStr.split('.')[1].length;
+    }
+    return 0;
+  }
+
   private getStepSize(symbol: string): number {
-    // This should be fetched from Binance API
-    // For now, return a default step size
-    return 0.001;
+    const symbolData = this.symbolInfo.get(symbol);
+    return symbolData?.stepSize || 0.001;
   }
 }
 

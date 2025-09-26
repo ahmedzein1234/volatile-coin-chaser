@@ -34,11 +34,14 @@ export class BinanceAPIService {
 
   async placeOrder(symbol: string, side: 'BUY' | 'SELL', quantity: number, type: 'MARKET' | 'LIMIT' = 'MARKET', price?: number): Promise<any> {
     try {
+      // Ensure quantity is properly formatted
+      const formattedQuantity = this.formatQuantity(quantity);
+      
       const order: any = {
         symbol: symbol,
         side: side,
         type: type,
-        quantity: quantity.toString()
+        quantity: formattedQuantity
       };
 
       if (type === 'LIMIT' && price) {
@@ -46,7 +49,7 @@ export class BinanceAPIService {
         order.timeInForce = 'GTC';
       }
 
-      logger.info(`Placing ${side} order for ${quantity} ${symbol} at ${price || 'market'}`);
+      logger.info(`Placing ${side} order for ${formattedQuantity} ${symbol} at ${price || 'market'}`);
       const result = await this.client.order(order);
       logger.info(`Order placed successfully:`, result);
       return result;
@@ -54,6 +57,11 @@ export class BinanceAPIService {
       logger.error(`Error placing order for ${symbol}:`, error);
       throw error;
     }
+  }
+
+  private formatQuantity(quantity: number): string {
+    // Remove trailing zeros and unnecessary decimal places
+    return parseFloat(quantity.toFixed(8)).toString();
   }
 
   async getOrderStatus(symbol: string, orderId: number): Promise<any> {
@@ -86,6 +94,9 @@ export class BinanceAPIService {
 
   async get24hrTicker(symbol: string): Promise<any> {
     try {
+      if (symbol === 'ALL') {
+        return await this.client.dailyStats();
+      }
       return await this.client.prices({ symbol });
     } catch (error) {
       logger.error(`Error getting 24hr ticker for ${symbol}:`, error);

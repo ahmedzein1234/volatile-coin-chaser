@@ -11,16 +11,16 @@ function showRiskConfig() {
     console.log('\n💰 PORTFOLIO LIMITS:');
     console.log(`Max Portfolio USDT: $${config.trading.maxPortfolioUSDT}`);
     console.log(`Max Positions: ${config.trading.maxPositions}`);
-    console.log(`Max Risk Per Trade: ${(config.trading.maxRiskPerTrade * 100).toFixed(2)}%`);
+    console.log(`Max Risk Per Trade: $${config.trading.maxRiskPerTradeUSDT} (Fixed USDT)`);
     console.log(`Max Portfolio Risk: ${(config.trading.maxPortfolioRisk * 100).toFixed(2)}%`);
     console.log(`Max Drawdown: ${(config.trading.maxDrawdown * 100).toFixed(2)}%`);
     
     console.log('\n📊 POSITION SIZING:');
-    const maxRiskPerTradeUSDT = config.trading.maxPortfolioUSDT * config.trading.maxRiskPerTrade;
+    const maxRiskPerTradeUSDT = config.trading.maxRiskPerTradeUSDT;
     const maxPositionUSDT = config.trading.maxPortfolioUSDT * 0.2; // 20% per position
-    console.log(`Max Risk Per Trade: $${maxRiskPerTradeUSDT.toFixed(2)}`);
+    console.log(`Max Risk Per Trade: $${maxRiskPerTradeUSDT.toFixed(2)} (Fixed)`);
     console.log(`Max Position Size: $${maxPositionUSDT.toFixed(2)}`);
-    console.log(`Risk per $1000 position: $${(maxRiskPerTradeUSDT * 5).toFixed(2)}`);
+    console.log(`Risk per trade: $${maxRiskPerTradeUSDT.toFixed(2)} (Fixed USDT amount)`);
     
     console.log('\n🛡️ RISK MANAGEMENT:');
     console.log(`Stop Loss: ATR-based (dynamic)`);

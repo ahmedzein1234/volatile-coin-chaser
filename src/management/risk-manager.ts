@@ -6,6 +6,7 @@ export class RiskManager {
   private maxPortfolioRisk = config.trading.maxPortfolioRisk;
   private maxDrawdown = config.trading.maxDrawdown;
   private maxPortfolioUSDT = config.trading.maxPortfolioUSDT || 200;
+  private maxRiskPerTradeUSDT = config.trading.maxRiskPerTradeUSDT || 5;
   private initialBalance: number = 0;
   private peakBalance: number = 0;
   private currentDrawdown: number = 0;
