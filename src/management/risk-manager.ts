@@ -5,6 +5,7 @@ import logger from '../services/logger';
 export class RiskManager {
   private maxPortfolioRisk = config.trading.maxPortfolioRisk;
   private maxDrawdown = config.trading.maxDrawdown;
+  private maxPortfolioUSDT = config.trading.maxPortfolioUSDT || 200;
   private initialBalance: number = 0;
   private peakBalance: number = 0;
   private currentDrawdown: number = 0;
@@ -19,11 +20,12 @@ export class RiskManager {
     const totalRisk = this.calculateTotalPortfolioRisk(positions);
     const currentDrawdown = this.calculateCurrentDrawdown(currentBalance);
     
-    const riskOk = totalRisk < this.maxPortfolioRisk;
+    // Use fixed USDT amount instead of percentage
+    const riskOk = totalRisk < this.maxPortfolioUSDT;
     const drawdownOk = currentDrawdown < this.maxDrawdown;
     
     if (!riskOk) {
-      logger.warn(`Portfolio risk limit exceeded: ${(totalRisk * 100).toFixed(2)}% > ${(this.maxPortfolioRisk * 100).toFixed(2)}%`);
+      logger.warn(`Portfolio risk limit exceeded: $${totalRisk.toFixed(2)} > $${this.maxPortfolioUSDT}`);
     }
     
     if (!drawdownOk) {
@@ -59,19 +61,17 @@ export class RiskManager {
   // Check if we should reduce position sizes due to high risk
   shouldReducePositionSize(positions: Position[], currentBalance: number): boolean {
     const totalRisk = this.calculateTotalPortfolioRisk(positions);
-    const riskPercentage = totalRisk / currentBalance;
     
-    return riskPercentage > (this.maxPortfolioRisk * 0.8); // 80% of max risk
+    return totalRisk > (this.maxPortfolioUSDT * 0.8); // 80% of max USDT risk
   }
 
   // Get recommended position size reduction factor
   getPositionSizeReductionFactor(positions: Position[], currentBalance: number): number {
     const totalRisk = this.calculateTotalPortfolioRisk(positions);
-    const riskPercentage = totalRisk / currentBalance;
     
-    if (riskPercentage > this.maxPortfolioRisk) {
+    if (totalRisk > this.maxPortfolioUSDT) {
       return 0.5; // Reduce by 50%
-    } else if (riskPercentage > (this.maxPortfolioRisk * 0.8)) {
+    } else if (totalRisk > (this.maxPortfolioUSDT * 0.8)) {
       return 0.7; // Reduce by 30%
     }
     
@@ -154,12 +154,11 @@ export class RiskManager {
   // Get risk status
   getRiskStatus(positions: Position[], currentBalance: number): string {
     const totalRisk = this.calculateTotalPortfolioRisk(positions);
-    const riskPercentage = (totalRisk / currentBalance) * 100;
     const drawdown = this.calculateCurrentDrawdown(currentBalance);
     
-    if (riskPercentage > this.maxPortfolioRisk * 100) {
+    if (totalRisk > this.maxPortfolioUSDT) {
       return 'HIGH_RISK';
-    } else if (riskPercentage > this.maxPortfolioRisk * 100 * 0.8) {
+    } else if (totalRisk > this.maxPortfolioUSDT * 0.8) {
       return 'MEDIUM_RISK';
     } else if (drawdown > this.maxDrawdown) {
       return 'HIGH_DRAWDOWN';
@@ -172,10 +171,9 @@ export class RiskManager {
   getRecommendedActions(positions: Position[], currentBalance: number): string[] {
     const actions: string[] = [];
     const totalRisk = this.calculateTotalPortfolioRisk(positions);
-    const riskPercentage = (totalRisk / currentBalance) * 100;
     const drawdown = this.calculateCurrentDrawdown(currentBalance);
     
-    if (riskPercentage > this.maxPortfolioRisk * 100) {
+    if (totalRisk > this.maxPortfolioUSDT) {
       actions.push('Reduce position sizes immediately');
       actions.push('Consider closing some positions');
     }

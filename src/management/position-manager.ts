@@ -161,8 +161,9 @@ export class PositionManager {
 
   calculatePositionSize(entryPrice: number, indicators: Indicators): number {
     try {
-      // Calculate risk amount based on account balance
-      const riskAmount = this.accountBalance * config.trading.maxRiskPerTrade;
+      // Calculate risk amount based on fixed USDT amount (200 USDT max portfolio)
+      const maxPortfolioUSDT = config.trading.maxPortfolioUSDT;
+      const riskAmount = maxPortfolioUSDT * config.trading.maxRiskPerTrade;
       
       // Calculate stop loss distance
       const stopLoss = this.calculateStopLoss(entryPrice, indicators);
@@ -177,7 +178,7 @@ export class PositionManager {
       
       // Ensure minimum viable profit (0.25% to cover fees + small profit)
       const minProfit = entryPrice * 0.0025;
-      const maxQuantity = (this.accountBalance * 0.1) / entryPrice; // Max 10% of balance per position
+      const maxQuantity = (maxPortfolioUSDT * 0.2) / entryPrice; // Max 20% of portfolio per position
       
       quantity = Math.min(quantity, maxQuantity);
       

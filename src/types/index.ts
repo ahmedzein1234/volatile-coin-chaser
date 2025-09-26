@@ -97,6 +97,7 @@ export interface Config {
     maxPositions: number;
     maxRiskPerTrade: number;
     maxPortfolioRisk: number;
+    maxPortfolioUSDT: number;
     maxDrawdown: number;
   };
   logging: {

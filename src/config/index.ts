@@ -18,6 +18,7 @@ export const config: Config = {
     maxPositions: parseInt(process.env.MAX_POSITIONS || '5'),
     maxRiskPerTrade: parseFloat(process.env.MAX_RISK_PER_TRADE || '0.02'),
     maxPortfolioRisk: parseFloat(process.env.MAX_PORTFOLIO_RISK || '0.10'),
+    maxPortfolioUSDT: parseFloat(process.env.MAX_PORTFOLIO_USDT || '200'),
     maxDrawdown: parseFloat(process.env.MAX_DRAWDOWN || '0.05')
   },
   logging: {
