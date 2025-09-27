@@ -8,11 +8,21 @@ export class ExitLogicEngine {
     const holdTime = Date.now() - position.entryTime;
     const holdTimeMinutes = holdTime / (1000 * 60);
 
+    // CRITICAL: Minimum hold time to prevent immediate exits
+    const minHoldTimeMinutes = 2; // Minimum 2 minutes hold time
+    if (holdTimeMinutes < minHoldTimeMinutes) {
+      return {
+        reason: `Minimum hold time not reached: ${holdTimeMinutes.toFixed(1)}/${minHoldTimeMinutes} minutes`,
+        priority: 0,
+        triggered: false
+      };
+    }
+
     // Priority 1: Profit targets (highest priority) - Fee-aware
     const totalFees = 0.002; // 0.2% Binance fees
-    const minProfitableExit = totalFees + 0.003; // 0.5% minimum profit after fees
+    const minProfitableExit = totalFees + 0.015; // 1.7% minimum profit after fees (increased to overcome fee impact)
     
-    if (profit >= minProfitableExit) { // 0.5% profit after fees
+    if (profit >= minProfitableExit) { // 0.7% profit after fees
       return {
         reason: `Profit target reached: ${(profit * 100).toFixed(2)}% (after fees)`,
         priority: 1,
@@ -20,18 +30,18 @@ export class ExitLogicEngine {
       };
     }
 
-    // Priority 2: Momentum exhaustion
-    if (indicators.williamsR > -20) {
+    // Priority 2: Momentum exhaustion (only after minimum hold time)
+    if (indicators.williamsR > -20 && holdTimeMinutes >= 5) {
       return {
-        reason: `Williams %R overbought: ${indicators.williamsR.toFixed(2)}`,
+        reason: `Williams %R overbought: ${indicators.williamsR.toFixed(2)} (after ${holdTimeMinutes.toFixed(1)}min)`,
         priority: 2,
         triggered: true
       };
     }
 
-    if (indicators.cci > 100) {
+    if (indicators.cci > 100 && holdTimeMinutes >= 5) {
       return {
-        reason: `CCI overbought: ${indicators.cci.toFixed(2)}`,
+        reason: `CCI overbought: ${indicators.cci.toFixed(2)} (after ${holdTimeMinutes.toFixed(1)}min)`,
         priority: 2,
         triggered: true
       };
@@ -175,10 +185,14 @@ export class ExitLogicEngine {
     
     if (!exitReason.triggered) return 'HOLD';
     
-    // Immediate exit for high priority reasons
-    if (exitReason.priority <= 3) return 'IMMEDIATE';
+    const holdTime = Date.now() - position.entryTime;
+    const holdTimeMinutes = holdTime / (1000 * 60);
     
-    // Wait for better exit for lower priority reasons
+    // Only immediate exit for profit targets or after sufficient time
+    if (exitReason.priority === 1) return 'IMMEDIATE'; // Profit targets
+    if (exitReason.priority <= 2 && holdTimeMinutes >= 5) return 'IMMEDIATE'; // Momentum after 5min
+    
+    // Wait for better exit for other reasons
     return 'WAIT';
   }
 

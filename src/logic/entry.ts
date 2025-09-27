@@ -86,7 +86,7 @@ export class EntryLogicEngine {
 
   shouldEnter(symbol: string, indicators: Indicators): boolean {
     const score = this.calculateEntryScore(indicators);
-    const shouldEnter = score.total >= 70; // Enter if score >= 70/100
+    const shouldEnter = score.total >= 65; // Enter if score >= 65/100 (Balanced for quality and frequency)
 
     if (shouldEnter) {
       logger.info(`Entry signal for ${symbol}: Score=${score.total}/100 (M:${score.momentum}, V:${score.volume}, Vol:${score.volatility}, R:${score.range})`);
@@ -141,9 +141,9 @@ export class EntryLogicEngine {
   getEntryConfidence(symbol: string, indicators: Indicators): 'LOW' | 'MEDIUM' | 'HIGH' | 'VERY_HIGH' {
     const score = this.calculateEntryScore(indicators);
     
-    if (score.total >= 90) return 'VERY_HIGH';
-    if (score.total >= 80) return 'HIGH';
-    if (score.total >= 70) return 'MEDIUM';
+    if (score.total >= 85) return 'VERY_HIGH';
+    if (score.total >= 75) return 'HIGH';
+    if (score.total >= 65) return 'MEDIUM';
     return 'LOW';
   }
 
@@ -166,8 +166,8 @@ export class EntryLogicEngine {
   getEntryTiming(symbol: string, indicators: Indicators): 'IMMEDIATE' | 'WAIT' | 'AVOID' {
     const score = this.calculateEntryScore(indicators);
     
-    if (score.total >= 80) return 'IMMEDIATE';
-    if (score.total >= 70) return 'WAIT';
+    if (score.total >= 75) return 'IMMEDIATE';
+    if (score.total >= 65) return 'WAIT';
     return 'AVOID';
   }
 }

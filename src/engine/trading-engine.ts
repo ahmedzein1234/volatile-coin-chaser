@@ -18,6 +18,7 @@ export class VolatileCoinChaser {
   private dailyCoinManager: DailyCoinManager;
   
   private isRunning: boolean = false;
+  private lastDataTime: Map<string, number> = new Map();
   private monitoringInterval: NodeJS.Timeout | null = null;
   private lastHealthCheck: number = 0;
 
@@ -99,8 +100,10 @@ export class VolatileCoinChaser {
 
     // Subscribe to price updates for all active coins
     for (const coin of activeCoins) {
-      this.binanceWS.subscribeToCoin(coin.symbol, (priceData: PriceData) => {
-        this.processPriceUpdate(coin.symbol, priceData);
+      // Convert symbol to USDT pair format for WebSocket subscription
+      const usdtSymbol = coin.symbol.endsWith('USDT') ? coin.symbol : `${coin.symbol}USDT`;
+      this.binanceWS.subscribeToCoin(usdtSymbol, (priceData: PriceData) => {
+        this.processPriceUpdate(coin.symbol, priceData); // Still use original symbol for internal processing
       });
     }
 
@@ -112,6 +115,9 @@ export class VolatileCoinChaser {
 
   private async processPriceUpdate(symbol: string, priceData: PriceData): Promise<void> {
     try {
+      // Track when we last received data for this symbol
+      this.lastDataTime.set(symbol, Date.now());
+      
       // Update indicators
       this.indicatorEngine.updateIndicators(symbol, priceData);
       
@@ -252,6 +258,10 @@ export class VolatileCoinChaser {
     }
   }
 
+  private getLastDataTime(symbol: string): number | undefined {
+    return this.lastDataTime.get(symbol);
+  }
+
   private performHealthCheck(): void {
     try {
       const now = Date.now();
@@ -264,17 +274,24 @@ export class VolatileCoinChaser {
         });
       }
       
-      // Check active coins
+      // Check active coins - only resubscribe if we have no data for a symbol for more than 60 seconds
       const activeCoins = this.dailyCoinManager.getActiveCoins();
       const monitoredSymbols = this.indicatorEngine.getSymbols();
       
-      // Ensure all active coins are being monitored
+      // Track symbols that need resubscription (only if they've been missing data for too long)
       for (const coin of activeCoins) {
         if (!monitoredSymbols.includes(coin.symbol)) {
-          logger.warn(`Coin ${coin.symbol} not being monitored, resubscribing...`);
-          this.binanceWS.subscribeToCoin(coin.symbol, (priceData: PriceData) => {
-            this.processPriceUpdate(coin.symbol, priceData);
-          });
+          // Only resubscribe if this is the first time we notice it's missing
+          // This prevents the constant resubscription warnings
+          const lastDataTime = this.getLastDataTime(coin.symbol);
+          if (!lastDataTime || (now - lastDataTime) > 60000) { // 60 seconds without data
+            logger.warn(`Coin ${coin.symbol} not receiving data for 60+ seconds, resubscribing...`);
+            // Convert symbol to USDT pair format for WebSocket subscription
+            const usdtSymbol = coin.symbol.endsWith('USDT') ? coin.symbol : `${coin.symbol}USDT`;
+            this.binanceWS.subscribeToCoin(usdtSymbol, (priceData: PriceData) => {
+              this.processPriceUpdate(coin.symbol, priceData);
+            });
+          }
         }
       }
       
@@ -317,8 +334,10 @@ export class VolatileCoinChaser {
     
     if (success) {
       // Subscribe to the new coin
-      this.binanceWS.subscribeToCoin(symbol, (priceData: PriceData) => {
-        this.processPriceUpdate(symbol, priceData);
+      // Convert symbol to USDT pair format for WebSocket subscription
+      const usdtSymbol = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+      this.binanceWS.subscribeToCoin(usdtSymbol, (priceData: PriceData) => {
+        this.processPriceUpdate(symbol, priceData); // Still use original symbol for internal processing
       });
       
       logger.info(`Added and started monitoring ${symbol}`);
